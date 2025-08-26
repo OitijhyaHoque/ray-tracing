@@ -24,7 +24,9 @@ This project is an implementation of ray tracing. It renders 3D scenes described
 
 ## Run
 
-This project requires **OpenGL** and **GLUT** to run. Use `run.sh` to compile and run the project. Make changes to `input/scene.txt` to modify the scene. The scene file also includes how it should be formatted. Please note that the general quadratic curve is not visible while running the program, it is only visible in the captured image.
+This project requires **OpenGL** and **GLUT** to run. Use `run.sh` to compile and run the project on linux. Make changes to `input/scene.txt` to modify the scene. The scene file also includes how it should be formatted. Please note that the general quadratic curve is not visible while running the program, it is only visible in the captured image.
+
+Compiling on **Windows**: `g++ ./src/2005049_main.cpp ./src/2005049_obj.cpp -o r.exe -lfreeglut -lglew32 -lopengl32 -lglu32`
 
 ## Controls
 
@@ -54,7 +56,7 @@ This project requires **OpenGL** and **GLUT** to run. Use `run.sh` to compile an
 
 | Key | Action |
 | :--- | :--- |
-| **0** | **Capture Scene**: Renders the current view and saves it as `output_YYYYMMDD_HHMMSS.bmp`[cite: 172]. |
+| **0** | **Capture Scene**: Renders the current view and saves it as `output_YYYYMMDD_HHMMSS.bmp`. |
 | **T / t** | **Toggle Texture**: Switches the floor rendering between the checkerboard and the loaded texture. |
 | **U / u** | **Update Texture**: Cycles to the next available texture file (e.g., `tex01.jpg`, `tex02.jpg`). |
 | **ESC** | **Exit** the application. |

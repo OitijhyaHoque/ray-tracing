@@ -21,20 +21,71 @@
 
 #define EPSILON 1e-6
 
+// Optimized Vector struct using fixed-size arrays
 struct Vector
 {
-    int size;
-    std::vector<double> vec;
-
-    Vector(int s);
-    void normalize();
-    double norm();
+    double vec[3];
+    
+    Vector() { vec[0] = vec[1] = vec[2] = 0.0; }
+    Vector(double x, double y, double z) { vec[0] = x; vec[1] = y; vec[2] = z; }
+    
+    inline void normalize()
+    {
+        double normValue = sqrt(vec[0]*vec[0] + vec[1]*vec[1] + vec[2]*vec[2]);
+        if (normValue > EPSILON) {
+            double inv = 1.0 / normValue;
+            vec[0] *= inv;
+            vec[1] *= inv;
+            vec[2] *= inv;
+        }
+    }
+    
+    inline double norm() const
+    {
+        return sqrt(vec[0]*vec[0] + vec[1]*vec[1] + vec[2]*vec[2]);
+    }
+    
+    inline double normSquared() const
+    {
+        return vec[0]*vec[0] + vec[1]*vec[1] + vec[2]*vec[2];
+    }
 };
 
-double dotProduct(const Vector &a, const Vector &b);
-Vector crossProduct(const Vector &a, const Vector &b);
-Vector add(const Vector &a, const Vector &b);
-Vector multiply(double scalar, const Vector &v);
+// Inline optimized vector operations
+inline double dotProduct(const Vector &a, const Vector &b)
+{
+    return a.vec[0] * b.vec[0] + a.vec[1] * b.vec[1] + a.vec[2] * b.vec[2];
+}
+
+inline Vector crossProduct(const Vector &a, const Vector &b)
+{
+    return Vector(
+        a.vec[1] * b.vec[2] - a.vec[2] * b.vec[1],
+        a.vec[2] * b.vec[0] - a.vec[0] * b.vec[2],
+        a.vec[0] * b.vec[1] - a.vec[1] * b.vec[0]
+    );
+}
+
+inline Vector add(const Vector &a, const Vector &b)
+{
+    return Vector(a.vec[0] + b.vec[0], a.vec[1] + b.vec[1], a.vec[2] + b.vec[2]);
+}
+
+inline Vector subtract(const Vector &a, const Vector &b)
+{
+    return Vector(a.vec[0] - b.vec[0], a.vec[1] - b.vec[1], a.vec[2] - b.vec[2]);
+}
+
+inline Vector multiply(double scalar, const Vector &v)
+{
+    return Vector(scalar * v.vec[0], scalar * v.vec[1], scalar * v.vec[2]);
+}
+
+inline Vector multiply(const Vector &v, double scalar)
+{
+    return Vector(scalar * v.vec[0], scalar * v.vec[1], scalar * v.vec[2]);
+}
+
 Vector rotation(const Vector &target, const Vector &axis, double angle);
 
 class Ray
@@ -69,7 +120,7 @@ public:
 
     double intersect(const Ray &ray, double *current_color, int level);
     virtual double solveIntersection(const Ray &ray) = 0;
-    virtual Vector getNormal(const Vector &point, const Vector &direction = Vector(3)) = 0;
+    virtual Vector getNormal(const Vector &point, const Vector &direction = Vector()) = 0;
     virtual Vector getColorAt(const Vector &point);
 };
 
@@ -79,7 +130,7 @@ public:
     Sphere(const Vector &center, double radius);
     void draw() override;
     double solveIntersection(const Ray &ray) override;
-    Vector getNormal(const Vector &point, const Vector &direction = Vector(3)) override;
+    Vector getNormal(const Vector &point, const Vector &direction = Vector()) override;
 };
 
 class Triangle : public Object
@@ -90,7 +141,7 @@ public:
     Triangle(const Vector &p1, const Vector &p2, const Vector &p3);
     void draw() override;
     double solveIntersection(const Ray &ray) override;
-    Vector getNormal(const Vector &point, const Vector &direction = Vector(3)) override;
+    Vector getNormal(const Vector &point, const Vector &direction = Vector()) override;
     Vector getColorAt(const Vector &point) override;
 };
 
@@ -101,7 +152,7 @@ public:
     GeneralQuadratic(double coeffs[10]);
     void draw() override;
     double solveIntersection(const Ray &ray) override;
-    Vector getNormal(const Vector &point, const Vector &direction = Vector(3)) override;
+    Vector getNormal(const Vector &point, const Vector &direction = Vector()) override;
     Vector getColorAt(const Vector &point) override;
     bool isPointInBoundingBox(const Vector &point) const;
 };
@@ -129,7 +180,7 @@ public:
     ~Floor();
     void draw() override;
     double solveIntersection(const Ray &ray) override;
-    Vector getNormal(const Vector &point, const Vector &direction = Vector(3)) override;
+    Vector getNormal(const Vector &point, const Vector &direction = Vector()) override;
     Vector getColorAt(const Vector &point) override;
 
     bool loadTexture(const std::string &filename);

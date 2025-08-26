@@ -10,111 +10,24 @@ bool applyTexture = false;
 int textureId = 0;
 int textureCount = 2;
 
-Vector::Vector(int s) : size(s)
-{
-    vec = std::vector<double>(s, 0);
-}
-
-void Vector::normalize()
-{
-    double normValue = norm();
-
-    if (normValue <= EPSILON)
-        throw std::runtime_error("Cannot normalize a zero vector.");
-
-    for (double &val : vec)
-        val /= normValue;
-}
-
-double Vector::norm()
-{
-    double norm = 0;
-    for (double val : vec)
-        norm += val * val;
-    return sqrt(norm);
-}
-
-double dotProduct(const Vector &a, const Vector &b)
-{
-    if (a.size != b.size)
-        throw std::invalid_argument("Vectors must be of the same size.");
-
-    double result = 0;
-    for (int i = 0; i < a.size; i++)
-    {
-        result += a.vec[i] * b.vec[i];
-    }
-    return result;
-}
-
-Vector crossProduct(const Vector &a, const Vector &b)
-{
-    if (a.size != 3 || b.size != 3)
-        throw std::invalid_argument("Cross product is only defined for 3D vectors.");
-
-    Vector result(3);
-    result.vec[0] = a.vec[1] * b.vec[2] - a.vec[2] * b.vec[1];
-    result.vec[1] = a.vec[2] * b.vec[0] - a.vec[0] * b.vec[2];
-    result.vec[2] = a.vec[0] * b.vec[1] - a.vec[1] * b.vec[0];
-
-    return result;
-}
-
-Vector add(const Vector &a, const Vector &b)
-{
-    if (a.size != b.size)
-        throw std::invalid_argument("Vectors must be of the same size.");
-
-    Vector result(a.size);
-    for (int i = 0; i < a.size; i++)
-    {
-        result.vec[i] = a.vec[i] + b.vec[i];
-    }
-    return result;
-}
-
-Vector multiply(double scalar, const Vector &v)
-{
-    Vector result(v.size);
-    for (int i = 0; i < v.size; i++)
-    {
-        result.vec[i] = scalar * v.vec[i];
-    }
-    return result;
-}
-
 Vector rotation(const Vector &target, const Vector &axis, double angle)
 {
-    if (axis.size != 3 || target.size != 3)
-        throw std::invalid_argument("Axis and target must be 3D");
-
-    // assume normalized axis
-
-    // Rodrigues' rotation formula
-    // v_rotated = v * cos(angle) + (k x v) * sin(angle) + k * (k . v) * (1 - cos(angle))
-
-    // radians
+    // Rodrigues' rotation formula - optimized
     double cosAngle = cos(angle);
     double sinAngle = sin(angle);
-
-    // k x v
-    Vector cross = crossProduct(axis, target);
-
-    // k . v
     double dot = dotProduct(axis, target);
 
-    Vector term1 = multiply(cosAngle, target);
-    Vector term2 = multiply(sinAngle, cross);
-    Vector term3 = multiply(dot * (1 - cosAngle), axis);
-    Vector result = add(term1, term2);
-    result = add(result, term3);
-    return result;
+    Vector cross = crossProduct(axis, target);
+
+    return Vector(
+        target.vec[0] * cosAngle + cross.vec[0] * sinAngle + axis.vec[0] * dot * (1 - cosAngle),
+        target.vec[1] * cosAngle + cross.vec[1] * sinAngle + axis.vec[1] * dot * (1 - cosAngle),
+        target.vec[2] * cosAngle + cross.vec[2] * sinAngle + axis.vec[2] * dot * (1 - cosAngle));
 }
 
-Object::Object() : reference_point(3), color(3)
+Object::Object() : reference_point(0, 0, 0), color(0, 0, 0)
 {
     height = width = length = 0.0;
-    color.vec[0] = color.vec[1] = color.vec[2] = 0.0;
     ambient = diffuse = specular = reflection = 0.0;
     shine = 0;
 }
@@ -149,34 +62,53 @@ double Object::intersect(const Ray &ray, double *current_color, int level)
     if (level == 0)
         return t;
 
-    // color computation
-    Vector intersection_point = add(ray.start, multiply(t - EPSILON, ray.dir));
-    Vector normal = getNormal(intersection_point, ray.dir);
+    // Optimized intersection point calculation
+    Vector intersection_point = Vector(
+        ray.start.vec[0] + t * ray.dir.vec[0],
+        ray.start.vec[1] + t * ray.dir.vec[1],
+        ray.start.vec[2] + t * ray.dir.vec[2]);
 
-    Vector resultColor(3);
-    resultColor.vec[0] = resultColor.vec[1] = resultColor.vec[2] = 0.0;
+    Vector normal = getNormal(intersection_point, ray.dir);
+    Vector resultColor(0, 0, 0);
 
     // add ambient color
     Vector colorAtPoint = getColorAt(intersection_point);
-    resultColor = add(resultColor, multiply(ambient, colorAtPoint));
+    resultColor = Vector(
+        ambient * colorAtPoint.vec[0],
+        ambient * colorAtPoint.vec[1],
+        ambient * colorAtPoint.vec[2]);
 
-    for (int i = 0; i < environment.pointLights.size(); i++)
+    // Optimized lighting calculations
+    for (size_t i = 0; i < environment.pointLights.size(); i++)
     {
         PointLight *light = environment.pointLights[i];
 
-        // intersection point to light
-        Vector lightDir = add(light->position, multiply(-1, intersection_point));
-        double lightDistance = lightDir.norm();
-        lightDir.normalize();
+        // Optimized light direction calculation
+        Vector lightDir = Vector(
+            light->position.vec[0] - intersection_point.vec[0],
+            light->position.vec[1] - intersection_point.vec[1],
+            light->position.vec[2] - intersection_point.vec[2]);
 
-        // ray from intersection point to light
-        // start point = intersection_point + EPSILON * lightDir to avoid self-shadowing
-        Ray shadowRay(add(intersection_point, multiply(EPSILON, lightDir)), lightDir);
+        double lightDistanceSquared = lightDir.normSquared();
+        double lightDistance = sqrt(lightDistanceSquared);
+
+        // Normalize in place
+        double invDist = 1.0 / lightDistance;
+        lightDir.vec[0] *= invDist;
+        lightDir.vec[1] *= invDist;
+        lightDir.vec[2] *= invDist;
+
+        // Optimized shadow ray
+        Vector shadowStart = Vector(
+            intersection_point.vec[0] + EPSILON * lightDir.vec[0],
+            intersection_point.vec[1] + EPSILON * lightDir.vec[1],
+            intersection_point.vec[2] + EPSILON * lightDir.vec[2]);
+        Ray shadowRay(shadowStart, lightDir);
 
         bool inShadow = false;
         for (Object *obj : environment.objects)
         {
-            double shadowT = obj->intersect(shadowRay, NULL, 0);
+            double shadowT = obj->solveIntersection(shadowRay);
             if (shadowT > EPSILON && shadowT < lightDistance - EPSILON)
             {
                 inShadow = true;
@@ -187,25 +119,34 @@ double Object::intersect(const Ray &ray, double *current_color, int level)
         if (inShadow)
             continue;
 
-        // Diffuse component
-        // Id = kd * IL * max(0, N.L)
+        // Optimized diffuse calculation
         double dotNL = dotProduct(normal, lightDir);
         if (dotNL > 0)
         {
-            Vector diffuseColor = multiply(diffuse * dotNL, light->color);
-            resultColor = add(resultColor, diffuseColor);
+            double diffuseIntensity = diffuse * dotNL;
+            resultColor.vec[0] += diffuseIntensity * light->color.vec[0];
+            resultColor.vec[1] += diffuseIntensity * light->color.vec[1];
+            resultColor.vec[2] += diffuseIntensity * light->color.vec[2];
         }
 
-        // Specular component
-        // Is = ks * IL * max(0, R.V)^shine
-        Vector viewDir = multiply(-1, ray.dir);
-        viewDir.normalize();
+        // Optimized specular calculation
+        Vector viewDir = Vector(-ray.dir.vec[0], -ray.dir.vec[1], -ray.dir.vec[2]);
+
         // R = 2 * (L.N) * N - L
-        Vector reflectDir = add(multiply(2 * dotProduct(lightDir, normal), normal), multiply(-1, lightDir));
-        reflectDir.normalize();
-        double spec = pow(std::max(dotProduct(viewDir, reflectDir), 0.0), shine);
-        Vector specularColor = multiply(specular * spec, light->color);
-        resultColor = add(resultColor, specularColor);
+        double twoLdotN = 2.0 * dotNL;
+        Vector reflectDir = Vector(
+            twoLdotN * normal.vec[0] - lightDir.vec[0],
+            twoLdotN * normal.vec[1] - lightDir.vec[1],
+            twoLdotN * normal.vec[2] - lightDir.vec[2]);
+
+        double spec = dotProduct(viewDir, reflectDir);
+        if (spec > 0)
+        {
+            double specularIntensity = specular * pow(spec, shine);
+            resultColor.vec[0] += specularIntensity * light->color.vec[0];
+            resultColor.vec[1] += specularIntensity * light->color.vec[1];
+            resultColor.vec[2] += specularIntensity * light->color.vec[2];
+        }
     }
 
     for (int i = 0; i < environment.spotLights.size(); i++)
@@ -223,7 +164,7 @@ double Object::intersect(const Ray &ray, double *current_color, int level)
             continue;
 
         // spotFactor * attenuation
-        double spotFactor = pow(angleCos, 10) / (EPSILON + lightDistance*lightDistance);
+        double spotFactor = pow(angleCos, 10) / (EPSILON + lightDistance * lightDistance);
 
         Ray shadowRay(add(intersection_point, multiply(EPSILON, lightDir)), lightDir);
 
@@ -268,10 +209,17 @@ double Object::intersect(const Ray &ray, double *current_color, int level)
         return t;
     }
 
-    // reflected ray
-    Vector reflected_ray_dir = add(ray.dir, multiply(-2.0 * dotProduct(ray.dir, normal), normal));
-    reflected_ray_dir.normalize();
-    Vector reflected_ray_start = add(intersection_point, multiply(EPSILON, reflected_ray_dir));
+    // Optimized reflected ray calculation
+    double rayDotNormal = dotProduct(ray.dir, normal);
+    Vector reflected_ray_dir = Vector(
+        ray.dir.vec[0] - 2.0 * rayDotNormal * normal.vec[0],
+        ray.dir.vec[1] - 2.0 * rayDotNormal * normal.vec[1],
+        ray.dir.vec[2] - 2.0 * rayDotNormal * normal.vec[2]);
+
+    Vector reflected_ray_start = Vector(
+        intersection_point.vec[0] + EPSILON * reflected_ray_dir.vec[0],
+        intersection_point.vec[1] + EPSILON * reflected_ray_dir.vec[1],
+        intersection_point.vec[2] + EPSILON * reflected_ray_dir.vec[2]);
     Ray reflected_ray(reflected_ray_start, reflected_ray_dir);
 
     // find nearest object for reflection
@@ -280,9 +228,8 @@ double Object::intersect(const Ray &ray, double *current_color, int level)
 
     for (size_t k = 0; k < environment.objects.size(); ++k)
     {
-        double dummy_color[3];
-        double t_reflected = environment.objects[k]->intersect(reflected_ray, dummy_color, 0);
-        if (t_reflected > EPSILON && t_reflected < t_min + EPSILON)
+        double t_reflected = environment.objects[k]->solveIntersection(reflected_ray);
+        if (t_reflected > EPSILON && t_reflected < t_min)
         {
             t_min = t_reflected;
             nearest_object_index = k;
@@ -294,12 +241,9 @@ double Object::intersect(const Ray &ray, double *current_color, int level)
         double reflected_color_arr[3] = {0.0, 0.0, 0.0};
         environment.objects[nearest_object_index]->intersect(reflected_ray, reflected_color_arr, level + 1);
 
-        Vector reflected_color(3);
-        reflected_color.vec[0] = reflected_color_arr[0];
-        reflected_color.vec[1] = reflected_color_arr[1];
-        reflected_color.vec[2] = reflected_color_arr[2];
-
-        resultColor = add(resultColor, multiply(reflection, reflected_color));
+        resultColor.vec[0] += reflection * reflected_color_arr[0];
+        resultColor.vec[1] += reflection * reflected_color_arr[1];
+        resultColor.vec[2] += reflection * reflected_color_arr[2];
     }
 
     current_color[0] = resultColor.vec[0];
@@ -317,7 +261,7 @@ Vector Object::getColorAt(const Vector &point)
 Sphere::Sphere(const Vector &center, double radius)
 {
     reference_point = center;
-    length = radius; // Using length to represent the radius
+    length = radius;
 }
 
 void Sphere::draw()
@@ -331,29 +275,31 @@ void Sphere::draw()
 
 double Sphere::solveIntersection(const Ray &ray)
 {
-    Vector o = add(ray.start, multiply(-1, reference_point)); // o = ray.start - sphere.center
+    // Optimized sphere intersection
+    Vector o = subtract(ray.start, reference_point);
     double b = 2 * dotProduct(o, ray.dir);
-    double c = dotProduct(o, o) - length * length; // length is radius
+    double c = o.normSquared() - length * length;
 
     double discriminant = b * b - 4 * c;
 
     if (discriminant < 0)
-        return -1.0; // No intersection
+        return -1.0;
 
-    double t1 = (-b - sqrt(discriminant)) / 2.0;
-    double t2 = (-b + sqrt(discriminant)) / 2.0;
+    double sqrtDisc = sqrt(discriminant);
+    double t1 = (-b - sqrtDisc) * 0.5;
+    double t2 = (-b + sqrtDisc) * 0.5;
 
     if (t1 > EPSILON)
         return t1;
     else if (t2 > EPSILON)
         return t2;
 
-    return -1.0; // Both intersections are behind the ray
+    return -1.0;
 }
 
 Vector Sphere::getNormal(const Vector &point, const Vector &direction)
 {
-    Vector normal = add(point, multiply(-1, reference_point));
+    Vector normal = subtract(point, reference_point);
     normal.normalize();
     return normal;
 }
@@ -434,7 +380,7 @@ GeneralQuadratic::GeneralQuadratic(double coeffs[10])
         coefficients[i] = coeffs[i];
     }
     // set from outside
-    reference_point = Vector(3);
+    reference_point = Vector();
     height = width = length = 1.0;
 }
 
@@ -583,7 +529,7 @@ Vector GeneralQuadratic::getNormal(const Vector &point, const Vector &direction)
     double y = point.vec[1];
     double z = point.vec[2];
 
-    Vector normal(3);
+    Vector normal;
     normal.vec[0] = 2 * A * x + D * y + E * z + G;
     normal.vec[1] = 2 * B * y + D * x + F * z + H;
     normal.vec[2] = 2 * C * z + E * x + F * y + I;
@@ -703,7 +649,7 @@ double Floor::solveIntersection(const Ray &ray)
 
 Vector Floor::getNormal(const Vector &point, const Vector &direction)
 {
-    Vector normal(3);
+    Vector normal;
     normal.vec[0] = 0;
     normal.vec[1] = 0;
     normal.vec[2] = 1;
@@ -720,7 +666,7 @@ Vector Floor::getColorAt(const Vector &point)
     if (point.vec[1] < leftY)
         tileY--;
 
-    Vector tileColor(3);
+    Vector tileColor;
 
     if (applyTexture && textureLoaded)
     {
@@ -786,7 +732,7 @@ void Floor::draw()
     }
 }
 
-PointLight::PointLight(const Vector &pos, const double col[3]) : position(pos), color(3)
+PointLight::PointLight(const Vector &pos, const double col[3]) : position(pos), color()
 {
     color.vec[0] = col[0];
     color.vec[1] = col[1];
@@ -839,7 +785,7 @@ void Camera::print()
 
 Vector Camera::getLookDirection()
 {
-    Vector look(3);
+    Vector look;
     look.vec[0] = center.vec[0] - eye.vec[0];
     look.vec[1] = center.vec[1] - eye.vec[1];
     look.vec[2] = center.vec[2] - eye.vec[2];
@@ -915,7 +861,6 @@ void Camera::rotateRoll(int dir)
 
 Ray::Ray(const Vector &start, const Vector &dir) : start(start), dir(dir)
 {
-    // Normalize the direction vector
     this->dir.normalize();
 }
 
@@ -960,7 +905,6 @@ void capture()
         }
     }
 
-    // double viewAngle = 80.0;
     double viewAngle = 45.0;
     double planeDistance = (environment.pixelCount / 2.0) / tan((viewAngle * M_PI / 180.0) / 2.0);
 
@@ -968,47 +912,49 @@ void capture()
     l.normalize();
     Vector r = crossProduct(l, camera.up);
     r.normalize();
-    // up - making sure the 3 vectors are orthogonal
     Vector u = crossProduct(r, l);
     u.normalize();
 
     double windowHeight = environment.pixelCount;
     double windowWidth = environment.pixelCount;
+    double du = windowWidth / environment.pixelCount;
+    double dv = windowHeight / environment.pixelCount;
 
-    int imageWidth = environment.pixelCount;
-    int imageHeight = environment.pixelCount;
+    // Precompute topleft corner
+    Vector topleft = Vector(
+        camera.eye.vec[0] + planeDistance * l.vec[0] - (windowWidth * 0.5) * r.vec[0] + (windowHeight * 0.5) * u.vec[0] + 0.5 * du * r.vec[0] - 0.5 * dv * u.vec[0],
+        camera.eye.vec[1] + planeDistance * l.vec[1] - (windowWidth * 0.5) * r.vec[1] + (windowHeight * 0.5) * u.vec[1] + 0.5 * du * r.vec[1] - 0.5 * dv * u.vec[1],
+        camera.eye.vec[2] + planeDistance * l.vec[2] - (windowWidth * 0.5) * r.vec[2] + (windowHeight * 0.5) * u.vec[2] + 0.5 * du * r.vec[2] - 0.5 * dv * u.vec[2]);
 
-    double du = (double)windowWidth / imageWidth;
-    double dv = (double)windowHeight / imageHeight;
+    // Precompute step vectors
+    Vector stepRight = multiply(du, r);
+    Vector stepDown = multiply(-dv, u);
 
-    // topleft = eye + l * planeDistance - r * windowWidth /2 + u * windowHeight /2
-    Vector topleft = add(camera.eye, multiply(planeDistance, l));
-    topleft = add(topleft, multiply(-windowWidth / 2.0, r));
-    topleft = add(topleft, multiply(windowHeight / 2.0, u));
-
-    topleft = add(topleft, multiply(0.5 * du, r));
-    topleft = add(topleft, multiply(-0.5 * dv, u));
-
-    for (int i = 0; i < imageWidth; ++i)
+    for (int i = 0; i < environment.pixelCount; ++i)
     {
-        for (int j = 0; j < imageHeight; ++j)
-        {
-            // calculate curpixel
-            Vector curPixel = add(topleft, multiply(i * du, r));
-            curPixel = add(curPixel, multiply(-j * dv, u));
+        Vector rowStart = Vector(
+            topleft.vec[0] + i * stepRight.vec[0],
+            topleft.vec[1] + i * stepRight.vec[1],
+            topleft.vec[2] + i * stepRight.vec[2]);
 
-            // cast ray
-            Vector rayDir = add(curPixel, multiply(-1, camera.eye));
+        for (int j = 0; j < environment.pixelCount; ++j)
+        {
+            Vector curPixel = Vector(
+                rowStart.vec[0] + j * stepDown.vec[0],
+                rowStart.vec[1] + j * stepDown.vec[1],
+                rowStart.vec[2] + j * stepDown.vec[2]);
+
+            Vector rayDir = subtract(curPixel, camera.eye);
             Ray ray(camera.eye, rayDir);
 
             int nearest_object_index = -1;
             double t_min = std::numeric_limits<double>::max();
 
+            // Optimized intersection loop
             for (size_t k = 0; k < environment.objects.size(); ++k)
             {
-                double dummy_color[3];
-                double t = environment.objects[k]->intersect(ray, dummy_color, 0);
-                if (t > 0 && t < t_min)
+                double t = environment.objects[k]->solveIntersection(ray);
+                if (t > EPSILON && t < t_min)
                 {
                     t_min = t;
                     nearest_object_index = k;
@@ -1020,14 +966,12 @@ void capture()
                 double color[3] = {0.0, 0.0, 0.0};
                 environment.objects[nearest_object_index]->intersect(ray, color, 1);
 
-                // Clamp color values to be within [0, 1]
-                for (int c_idx = 0; c_idx < 3; ++c_idx)
-                {
-                    color[c_idx] = std::max(0.0, std::min(1.0, color[c_idx]));
-                }
+                // Clamp and convert to byte values
+                int r = (int)(std::min(1.0, std::max(0.0, color[0])) * 255);
+                int g = (int)(std::min(1.0, std::max(0.0, color[1])) * 255);
+                int b = (int)(std::min(1.0, std::max(0.0, color[2])) * 255);
 
-                // Update the bitmap image with the calculated color
-                image.set_pixel(i, j, (unsigned char)(color[0] * 255), (unsigned char)(color[1] * 255), (unsigned char)(color[2] * 255));
+                image.set_pixel(i, j, r, g, b);
             }
         }
     }

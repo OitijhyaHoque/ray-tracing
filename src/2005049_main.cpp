@@ -13,7 +13,7 @@ using namespace std;
 extern int textureId;
 extern int textureCount;
 
-Vector eye_pos(3), center_pos(3), up_vec(3);
+Vector eye_pos, center_pos, up_vec;
 Camera camera(eye_pos, center_pos, up_vec);
 
 Environment environment;
@@ -115,7 +115,7 @@ void loadData(string filename)
                     vector<string> l4 = processLine(lines[i + 4]);
                     vector<string> l5 = processLine(lines[i + 5]);
 
-                    Vector center(3);
+                    Vector center;
                     center.vec[0] = stod(l1[0]);
                     center.vec[1] = stod(l1[1]);
                     center.vec[2] = stod(l1[2]);
@@ -151,7 +151,7 @@ void loadData(string filename)
                     vector<string> l5 = processLine(lines[i + 5]);
                     vector<string> l6 = processLine(lines[i + 6]);
 
-                    Vector p1(3), p2(3), p3(3);
+                    Vector p1, p2, p3;
                     p1.vec[0] = stod(l1[0]);
                     p1.vec[1] = stod(l1[1]);
                     p1.vec[2] = stod(l1[2]);
@@ -197,7 +197,7 @@ void loadData(string filename)
                         coeffs[k] = stod(l1[k]);
                     }
 
-                    Vector ref_pt(3);
+                    Vector ref_pt;
                     ref_pt.vec[0] = stod(l2[0]);
                     ref_pt.vec[1] = stod(l2[1]);
                     ref_pt.vec[2] = stod(l2[2]);
@@ -254,7 +254,7 @@ void loadData(string filename)
                 vector<string> l1 = processLine(lines[i]);
                 vector<string> l2 = processLine(lines[i + 1]);
 
-                Vector position(3);
+                Vector position;
                 position.vec[0] = stod(l1[0]);
                 position.vec[1] = stod(l1[1]);
                 position.vec[2] = stod(l1[2]);
@@ -289,7 +289,7 @@ void loadData(string filename)
                 vector<string> l3 = processLine(lines[i + 2]);
                 vector<string> l4 = processLine(lines[i + 3]);
 
-                Vector position(3);
+                Vector position;
                 position.vec[0] = stod(l1[0]);
                 position.vec[1] = stod(l1[1]);
                 position.vec[2] = stod(l1[2]);
@@ -299,7 +299,7 @@ void loadData(string filename)
                 color[1] = stod(l2[1]);
                 color[2] = stod(l2[2]);
 
-                Vector direction(3);
+                Vector direction;
                 direction.vec[0] = stod(l3[0]);
                 direction.vec[1] = stod(l3[1]);
                 direction.vec[2] = stod(l3[2]);
